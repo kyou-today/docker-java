@@ -6,6 +6,7 @@ import com.github.dockerjava.api.command.InspectContainerResponse;
 import com.github.dockerjava.api.model.Frame;
 import com.github.dockerjava.api.model.StreamType;
 import com.github.dockerjava.core.command.AttachContainerResultCallback;
+import org.junit.Assume;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.ExpectedException;
@@ -13,14 +14,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.ByteArrayInputStream;
-import java.io.Closeable;
 import java.io.File;
 import java.io.InputStream;
 import java.io.PipedInputStream;
 import java.io.PipedOutputStream;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicLong;
 
 import static com.github.dockerjava.junit.DockerRule.DEFAULT_IMAGE;
 import static java.util.concurrent.TimeUnit.SECONDS;
@@ -32,7 +31,6 @@ import static org.hamcrest.Matchers.isEmptyString;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.junit.Assume.assumeThat;
 
 /**
  * @author Kanstantsin Shautsou
@@ -48,7 +46,7 @@ public class AttachContainerCmdIT extends CmdIT {
     public void attachContainerWithStdin() throws Exception {
         DockerClient dockerClient = dockerRule.getClient();
 
-        assumeThat(getFactoryType(), is(FactoryType.NETTY));
+        Assume.assumeTrue("supports stdin attach", getFactoryType().supportsStdinAttach());
 
         String snippet = "hello world";
 
@@ -172,9 +170,8 @@ public class AttachContainerCmdIT extends CmdIT {
     public void attachContainerStdinUnsupported() throws Exception {
 
         DockerClient dockerClient = dockerRule.getClient();
-        if (getFactoryType() == FactoryType.JERSEY) {
-            expectedException.expect(UnsupportedOperationException.class);
-        }
+        Assume.assumeFalse("does not support stdin attach", getFactoryType().supportsStdinAttach());
+        expectedException.expect(UnsupportedOperationException.class);
 
         String snippet = "hello world";
 
@@ -218,56 +215,43 @@ public class AttachContainerCmdIT extends CmdIT {
         DockerClient dockerClient = dockerRule.getClient();
 
         CreateContainerResponse container = dockerClient.createContainerCmd(DEFAULT_IMAGE)
-                .withCmd("echo", "hello world")
+                .withCmd("echo", "hello")
                 .withTty(false)
                 .exec();
         LOG.info("Created container: {}", container.toString());
 
-        final CountDownLatch started = new CountDownLatch(1);
-        final AtomicLong startedAtNanos = new AtomicLong();
-        final CountDownLatch gotLine = new CountDownLatch(1);
-        final CountDownLatch completed = new CountDownLatch(1);
-        final AtomicLong gotLineAtNanos = new AtomicLong();
-        AttachContainerTestCallback callback = new AttachContainerTestCallback() {
-            @Override
-            public void onStart(Closeable stream) {
-                startedAtNanos.set(System.nanoTime());
-                started.countDown();
-                super.onStart(stream);
-            }
+        CountDownLatch gotLine = new CountDownLatch(1);
+        try (
+                AttachContainerResultCallback resultCallback = dockerClient.attachContainerCmd(container.getId())
+                        .withStdOut(true)
+                        .withStdErr(true)
+                        .withFollowStream(true)
+                        .exec(new AttachContainerTestCallback() {
+                            @Override
+                            public void onNext(Frame item) {
+                                LOG.info("Got frame: {}", item);
+                                if (item.getStreamType() == StreamType.STDOUT) {
+                                    gotLine.countDown();
+                                }
+                                super.onNext(item);
+                            }
 
-            @Override
-            public void onNext(Frame item) {
-                if (item.getStreamType() == StreamType.STDOUT) {
-                    gotLineAtNanos.set(System.nanoTime());
-                    gotLine.countDown();
-                }
-                super.onNext(item);
-            }
-
-            @Override
-            public void onComplete() {
-                completed.countDown();
-                super.onComplete();
-            }
-        };
-
-        try (Closeable ignored = callback) {
-            dockerClient.attachContainerCmd(container.getId())
-                    .withStdOut(true)
-                    .withFollowStream(true)
-                    .exec(callback);
+                            @Override
+                            public void onComplete() {
+                                LOG.info("On complete");
+                                super.onComplete();
+                            }
+                        })
+        ) {
+            resultCallback.awaitStarted(5, SECONDS);
+            LOG.info("Attach started");
 
             dockerClient.startContainerCmd(container.getId()).exec();
+            LOG.info("Container started");
 
-            assertTrue("Should start in a reasonable time", started.await(30, SECONDS));
             assertTrue("Should get first line quickly after the start", gotLine.await(15, SECONDS));
 
-            long gotLineDurationSeconds = (gotLineAtNanos.get() - startedAtNanos.get()) / 1_000_000_000L;
-            LOG.info("Got line from {} for {} seconds", container.getId(), gotLineDurationSeconds);
-
-            boolean finished = completed.await(1L + gotLineDurationSeconds, SECONDS);
-            assertTrue("Should get EOF in a time close to time of getting the first line", finished);
+            resultCallback.awaitCompletion(5, SECONDS);
         }
     }
 

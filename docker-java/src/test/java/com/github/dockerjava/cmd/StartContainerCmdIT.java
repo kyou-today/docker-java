@@ -1,9 +1,7 @@
 package com.github.dockerjava.cmd;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.command.CreateContainerResponse;
 import com.github.dockerjava.api.command.InspectContainerResponse;
-import com.github.dockerjava.api.command.StartContainerCmd;
 import com.github.dockerjava.api.exception.DockerException;
 import com.github.dockerjava.api.exception.InternalServerErrorException;
 import com.github.dockerjava.api.exception.NotFoundException;
@@ -174,7 +172,7 @@ public class StartContainerCmdIT extends CmdIT {
 
     @Test
     public void startContainerWithPortBindings() throws DockerException {
-        int baseport = getFactoryType() == FactoryType.JERSEY ? 13000 : 14000;
+        int baseport = 20_000 + (getFactoryType().ordinal() * 1000);
 
         ExposedPort tcp22 = ExposedPort.tcp(22);
         ExposedPort tcp23 = ExposedPort.tcp(23);
@@ -569,12 +567,5 @@ public class StartContainerCmdIT extends CmdIT {
         // The DNS setting survived.
         assertThat(inspectContainerResponse.getHostConfig().getDns(), is(notNullValue()));
         assertThat(Arrays.asList(inspectContainerResponse.getHostConfig().getDns()), contains(dnsServer));
-    }
-
-    @Test
-    public void anUnconfiguredCommandSerializesToEmptyJson() throws Exception {
-        ObjectMapper objectMapper = new ObjectMapper();
-        StartContainerCmd command = dockerRule.getClient().startContainerCmd("");
-        assertThat(objectMapper.writeValueAsString(command), is("{}"));
     }
 }

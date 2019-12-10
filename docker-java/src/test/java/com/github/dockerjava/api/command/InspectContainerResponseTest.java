@@ -16,11 +16,11 @@
 package com.github.dockerjava.api.command;
 
 import com.fasterxml.jackson.databind.JavaType;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.github.dockerjava.api.model.ContainerNetwork;
 import com.github.dockerjava.api.model.Isolation;
 import com.github.dockerjava.api.model.Volume;
 import com.github.dockerjava.core.RemoteApiVersion;
+import com.github.dockerjava.test.serdes.JSONTestHelper;
 import org.junit.Test;
 
 import java.io.IOException;
@@ -31,6 +31,7 @@ import static com.github.dockerjava.test.serdes.JSONSamples.testRoundTrip;
 import static com.github.dockerjava.test.serdes.JSONTestHelper.testRoundTrip;
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.Matchers.containsString;
+import static org.hamcrest.Matchers.equalTo;
 import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.isEmptyString;
 import static org.hamcrest.Matchers.notNullValue;
@@ -68,8 +69,7 @@ public class InspectContainerResponseTest {
     @Test
     public void roundTrip_full_healthcheck() throws IOException {
 
-        final ObjectMapper mapper = new ObjectMapper();
-        final JavaType type = mapper.getTypeFactory().constructType(InspectContainerResponse.class);
+        final JavaType type = JSONTestHelper.getMapper().getTypeFactory().constructType(InspectContainerResponse.class);
 
         final InspectContainerResponse response = testRoundTrip(RemoteApiVersion.VERSION_1_24,
                 "/containers/inspect/1.json",
@@ -139,8 +139,7 @@ public class InspectContainerResponseTest {
     @Test
     public void inspect_windows_container() throws IOException {
 
-        final ObjectMapper mapper = new ObjectMapper();
-        final JavaType type = mapper.getTypeFactory().constructType(InspectContainerResponse.class);
+        final JavaType type = JSONTestHelper.getMapper().getTypeFactory().constructType(InspectContainerResponse.class);
 
         final InspectContainerResponse response = testRoundTrip(RemoteApiVersion.VERSION_1_38,
                 "/containers/inspect/lcow.json",
@@ -187,5 +186,10 @@ public class InspectContainerResponseTest {
 
         assertThat(response.getPath(), is("cmd"));
         assertThat(response.getPlatform(), is("windows"));
+    }
+
+    @Test
+    public void equals() {
+        assertThat(new InspectContainerResponse(), equalTo(new InspectContainerResponse()));
     }
 }

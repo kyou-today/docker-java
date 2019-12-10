@@ -3,10 +3,10 @@ package com.github.dockerjava.netty;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.github.dockerjava.api.async.ResultCallback;
 import com.github.dockerjava.api.exception.DockerClientException;
 import com.github.dockerjava.api.model.Frame;
+import com.github.dockerjava.core.DefaultDockerClientConfig;
 import com.github.dockerjava.core.InvocationBuilder;
 import com.github.dockerjava.core.async.ResultCallbackTemplate;
 import com.github.dockerjava.netty.handler.FramedResponseStreamHandler;
@@ -80,7 +80,19 @@ public class NettyInvocationBuilder implements InvocationBuilder {
 
     private Map<String, String> headers = new HashMap<>();
 
+    private final ObjectMapper objectMapper;
+
+    @Deprecated
     public NettyInvocationBuilder(ChannelProvider channelProvider, String resource) {
+        this(
+                DefaultDockerClientConfig.createDefaultConfigBuilder().build().getObjectMapper(),
+                channelProvider,
+                resource
+        );
+    }
+
+    public NettyInvocationBuilder(ObjectMapper objectMapper, ChannelProvider channelProvider, String resource) {
+        this.objectMapper = objectMapper;
         this.channelProvider = channelProvider;
         this.resource = resource;
     }
@@ -143,7 +155,9 @@ public class NettyInvocationBuilder implements InvocationBuilder {
 
         Channel channel = getChannel();
 
-        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(typeReference,
+        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(
+                objectMapper,
+                typeReference,
                 resultCallback);
 
         HttpResponseHandler responseHandler = new HttpResponseHandler(requestProvider, resultCallback);
@@ -267,7 +281,9 @@ public class NettyInvocationBuilder implements InvocationBuilder {
 
         Channel channel = getChannel();
 
-        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(typeReference,
+        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(
+                objectMapper,
+                typeReference,
                 resultCallback);
 
         HttpResponseHandler responseHandler = new HttpResponseHandler(requestProvider, resultCallback);
@@ -317,8 +333,6 @@ public class NettyInvocationBuilder implements InvocationBuilder {
 
             byte[] bytes;
             try {
-                ObjectMapper objectMapper = new ObjectMapper();
-                objectMapper.configure(SerializationFeature.FAIL_ON_EMPTY_BEANS, false);
                 bytes = objectMapper.writeValueAsBytes(entity);
             } catch (JsonProcessingException e) {
                 throw new RuntimeException(e);
@@ -371,7 +385,9 @@ public class NettyInvocationBuilder implements InvocationBuilder {
 
         Channel channel = getChannel();
 
-        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(typeReference,
+        JsonResponseCallbackHandler<T> jsonResponseHandler = new JsonResponseCallbackHandler<>(
+                objectMapper,
+                typeReference,
                 resultCallback);
 
         HttpResponseHandler responseHandler = new HttpResponseHandler(requestProvider, resultCallback);
